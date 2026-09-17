@@ -95,7 +95,7 @@ class Person {
     }
 
     get email() {
-        return `${name}@org.com`
+        return f"{name}@org.com"
     }
 }
 
