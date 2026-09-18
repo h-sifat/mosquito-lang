@@ -1,17 +1,17 @@
-use crate::tokens::{Spanned, Token};
+use crate::tokens::{Spanned, TOKEN_MAP, TokenType};
 
 pub struct Lexer {
     source: Vec<char>,
-    cursor: usize,
-    pub line: usize,
+    cursor_idx: usize,
+    pub line_num: usize,
 }
 
 impl Lexer {
     pub fn new(source: &str) -> Lexer {
         return Lexer {
             source: source.chars().collect(),
-            cursor: 0,
-            line: 0,
+            cursor_idx: 0,
+            line_num: 0,
         };
     }
 
@@ -21,10 +21,12 @@ impl Lexer {
     }
 
     fn advance(&mut self) -> Option<char> {
-        let (next_idx, line_idx, res_char) = self.do_advance();
+        let (next_idx, line_num, res_char) = self.do_advance();
 
-        self.cursor = next_idx;
-        self.line = line_idx;
+        println!("advance: {}, {}, {:?}", next_idx, line_num, res_char);
+
+        self.cursor_idx = next_idx;
+        self.line_num = line_num;
 
         res_char
     }
@@ -34,9 +36,13 @@ impl Lexer {
         let src = &self.source;
 
         let mut in_comment = false;
-        let mut idx = self.cursor;
-        let mut line = self.line;
+        let mut idx = self.cursor_idx;
+        let mut line = self.line_num;
         let mut res_char: Option<char> = None;
+
+        if line == 0 {
+            line = 1;
+        }
 
         while idx < src.len() {
             if res_char.is_some() {
@@ -44,6 +50,10 @@ impl Lexer {
             }
 
             let curr = src[idx];
+            println!(
+                "while --> idx: {}, in_comment: {}, curr: '{}'",
+                idx, in_comment, curr
+            );
 
             match curr {
                 '/' => {
@@ -54,8 +64,11 @@ impl Lexer {
                         res_char = Some('/');
                     }
                 }
-                '\n' if in_comment => {
-                    in_comment = false;
+                '\n' => {
+                    if in_comment {
+                        in_comment = false;
+                    }
+
                     line += 1;
                 }
                 _ => {
@@ -68,26 +81,35 @@ impl Lexer {
             idx += 1;
         }
 
-        (idx, line, None)
+        (idx, line, res_char)
     }
 
     pub fn tokenize(&mut self) -> Vec<Spanned> {
-        let mut spanned_tokens = vec![];
+        let mut tokens = vec![];
 
         loop {
-            if let Some(_c) = self.advance() {
-                todo!()
-            } else {
-                let spanned = Spanned {
-                    line: self.line,
-                    token: Token::Eof,
-                };
+            if let Some(c) = self.advance() {
+                let token = TOKEN_MAP
+                    .get(&c)
+                    .copied()
+                    .expect(&format!("Unknown token '{}'!", c));
 
-                spanned_tokens.push(spanned);
+                tokens.push(Spanned {
+                    token,
+                    line: self.line_num,
+                });
+            } else {
+                tokens.push(Spanned {
+                    token: TokenType::Eof,
+                    line: self.line_num,
+                });
                 break;
             }
         }
 
-        spanned_tokens
+        tokens
     }
 }
+
+#[cfg(test)]
+mod tests;
