@@ -1,13 +1,26 @@
+#![allow(dead_code)]
+#![allow(unused)]
+
+use lexer::Lexer;
 use std::fs::read_to_string;
 
-fn main() {
+mod lexer;
+mod tokens;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     match read_to_string("docs/hello.msqt") {
         Ok(program) => {
             println!("{}", program);
+            let mut lexer = Lexer::new(&program);
+            let tokens = lexer.tokenize();
+
+            println!("{:?}", tokens);
+
+            Ok(())
         }
         Err(error) => {
             eprintln!("Could not read program! Error: {}", error);
-            std::process::exit(1);
+            Err(Box::new(error))
         }
     }
 }
