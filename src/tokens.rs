@@ -12,6 +12,8 @@ pub enum TokenType {
     Semicolon,
     Dot,
     Eof,
+
+    Number(f64),
 }
 
 #[derive(Debug, PartialEq)]
