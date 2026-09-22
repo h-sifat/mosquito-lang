@@ -1,4 +1,4 @@
-use crate::tokens::{Spanned, TOKEN_MAP, TokenType};
+use crate::tokens::{Spanned, TokenType};
 
 #[derive(Debug)]
 pub struct Lexer {
@@ -85,6 +85,26 @@ impl Lexer {
             .unwrap_or_else(|_| panic!("scan_number produced an unparsable lexeme: '{lexeme}'"))
     }
 
+    fn is_start_of_identifier(&self, c: char) -> bool {
+        return c.is_ascii_alphabetic() || c == '_';
+    }
+
+    /// make sure that the self.is_start_of_identifier(current_char) == true
+    fn scan_identifier(&mut self) -> String {
+        let mut ident = String::new();
+
+        while let Some(c) = self.peek() {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                ident.push(c);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        ident
+    }
+
     pub fn tokenize(&mut self) -> Vec<Spanned> {
         let mut tokens = vec![];
 
@@ -102,12 +122,16 @@ impl Lexer {
 
             let token = if c.is_ascii_digit() {
                 TokenType::Number(self.scan_number())
-            } else {
+            } else if let Some(token) = TokenType::to_punctuation_token(&c) {
                 self.advance();
-                TOKEN_MAP
-                    .get(&c)
-                    .copied()
-                    .unwrap_or_else(|| panic!("Unknown token '{c}'!"))
+                token
+            } else if self.is_start_of_identifier(c) {
+                let ident = self.scan_identifier();
+
+                TokenType::to_keyword_or_bool_data_value(&ident).unwrap_or(TokenType::Ident(ident))
+            } else {
+                println!("Here, c: {c}");
+                todo!()
             };
 
             tokens.push(Spanned { token, line });

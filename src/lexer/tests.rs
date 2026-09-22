@@ -8,7 +8,7 @@ fn assert_tokens(source: &str, expected: &[(TokenType, usize)]) {
     let expected: Vec<Spanned> = expected
         .iter()
         .map(|(token, line)| Spanned {
-            token: *token,
+            token: token.clone(),
             line: *line,
         })
         .collect();
@@ -107,6 +107,56 @@ fn numbers() {
         ),
         // line tracking still has to work when a number follows a comment
         ("// x\n7", &[(Number(7.0), 2), (Eof, 2)]),
+    ];
+
+    run_cases(cases);
+}
+
+#[test]
+fn identifiers_and_keywords() {
+    use TokenType::*;
+
+    let cases: &[(&str, &[(TokenType, usize)])] = &[
+        ("let", &[(Let, 1), (Eof, 1)]),
+        ("const", &[(Const, 1), (Eof, 1)]),
+        ("mut", &[(Mut, 1), (Eof, 1)]),
+        ("function", &[(Function, 1), (Eof, 1)]),
+        ("return", &[(Return, 1), (Eof, 1)]),
+        ("class", &[(Class, 1), (Eof, 1)]),
+        ("pub", &[(Pub, 1), (Eof, 1)]),
+        ("init", &[(Init, 1), (Eof, 1)]),
+        ("self", &[(SelfKw, 1), (Eof, 1)]),
+        ("static", &[(Static, 1), (Eof, 1)]),
+        ("get", &[(Get, 1), (Eof, 1)]),
+        ("new", &[(New, 1), (Eof, 1)]),
+        ("enum", &[(Enum, 1), (Eof, 1)]),
+        ("match", &[(Match, 1), (Eof, 1)]),
+        ("if", &[(If, 1), (Eof, 1)]),
+        ("else", &[(Else, 1), (Eof, 1)]),
+        ("while", &[(While, 1), (Eof, 1)]),
+        ("for", &[(For, 1), (Eof, 1)]),
+        ("typeof", &[(Typeof, 1), (Eof, 1)]),
+        ("void", &[(Void, 1), (Eof, 1)]),
+        // true/false are literal *values*, not bare keywords - same shape as Number(f64)
+        ("true", &[(Bool(true), 1), (Eof, 1)]),
+        ("false", &[(Bool(false), 1), (Eof, 1)]),
+        ("x", &[(Ident("x".to_string()), 1), (Eof, 1)]),
+        // maximal munch: "letter" is one identifier, NOT `Let` + `Ident("ter")`
+        ("letter", &[(Ident("letter".to_string()), 1), (Eof, 1)]),
+        ("x1", &[(Ident("x1".to_string()), 1), (Eof, 1)]),
+        ("_foo", &[(Ident("_foo".to_string()), 1), (Eof, 1)]),
+        ("if x", &[(If, 1), (Ident("x".to_string()), 1), (Eof, 1)]),
+        // identifiers must stop cleanly at punctuation even with no space
+        (
+            "if(x)",
+            &[
+                (If, 1),
+                (LParen, 1),
+                (Ident("x".to_string()), 1),
+                (RParen, 1),
+                (Eof, 1),
+            ],
+        ),
     ];
 
     run_cases(cases);
