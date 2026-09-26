@@ -1,7 +1,16 @@
 use super::*;
 
 fn lex(source: &str) -> Vec<Spanned> {
-    Lexer::new(source).tokenize()
+    Lexer::new(source)
+        .tokenize()
+        .unwrap_or_else(|e| panic!("expected {source:?} to tokenize, got error: {e}"))
+}
+
+fn lex_err(source: &str) -> LexError {
+    match Lexer::new(source).tokenize() {
+        Ok(tokens) => panic!("expected {source:?} to fail to tokenize, got: {tokens:?}"),
+        Err(e) => e,
+    }
 }
 
 fn assert_tokens(source: &str, expected: &[(TokenType, usize)]) {
@@ -160,4 +169,63 @@ fn identifiers_and_keywords() {
     ];
 
     run_cases(cases);
+}
+
+#[test]
+fn empty_char_literal_is_an_error() {
+    // this one doesn't hit the missing-advance() bug below, since the loop
+    // breaks out on the very first peek (the closing quote) without ever
+    // needing to advance past anything
+    match lex_err("''") {
+        LexError::InvalidCharLiteral { message, .. } => {
+            assert_eq!(message, "Empty character literal!");
+        }
+        other => panic!("expected InvalidCharLiteral, got {other:?}"),
+    }
+}
+
+#[test]
+fn char_literals() {
+    use TokenType::*;
+
+    let cases: &[(&str, &[(TokenType, usize)])] = &[
+        ("'*'", &[(Char('*'), 1), (Eof, 1)]),
+        ("'\\n'", &[(Char('\n'), 1), (Eof, 1)]),
+        ("'\\t'", &[(Char('\t'), 1), (Eof, 1)]),
+        ("'\\''", &[(Char('\''), 1), (Eof, 1)]),
+        ("'\\\\'", &[(Char('\\'), 1), (Eof, 1)]),
+    ];
+
+    run_cases(cases);
+
+    match lex_err("'ab'") {
+        LexError::InvalidCharLiteral { message, .. } => {
+            assert_eq!(message, "Multiple characters in char literal!");
+        }
+        other => panic!("expected InvalidCharLiteral, got {other:?}"),
+    }
+
+    match lex_err("'\nx'") {
+        LexError::UnterminatedCharLiteral { .. } => {}
+        other => panic!("expected UnterminatedCharLiteral, got {other:?}"),
+    }
+
+    // running out of input entirely (no closing quote at all) is a second,
+    // distinct way to be unterminated - not just hitting a raw '\n' early
+    match lex_err("'a") {
+        LexError::UnterminatedCharLiteral { .. } => {}
+        other => panic!("expected UnterminatedCharLiteral, got {other:?}"),
+    }
+
+    match lex_err("'ab") {
+        LexError::UnterminatedCharLiteral { .. } => {}
+        other => panic!("expected UnterminatedCharLiteral, got {other:?}"),
+    }
+
+    match lex_err("'\\q'") {
+        LexError::InvalidCharLiteral { message, .. } => {
+            assert_eq!(message, "Invalid escape sequence '\\q'");
+        }
+        other => panic!("expected InvalidCharLiteral, got {other:?}"),
+    }
 }

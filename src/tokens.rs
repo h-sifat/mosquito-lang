@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::LazyLock};
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // Punctuations
@@ -49,6 +47,7 @@ pub enum TokenType {
     Number(f64),
     Ident(String),
     Bool(bool),
+    Char(char),
 }
 
 impl TokenType {

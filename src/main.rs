@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused)]
-
 use lexer::Lexer;
 use std::fs::read_to_string;
 
@@ -12,11 +9,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(program) => {
             println!("{}", program);
             let mut lexer = Lexer::new(&program);
-            let tokens = lexer.tokenize();
 
-            println!("{:?}", tokens);
-
-            Ok(())
+            match lexer.tokenize() {
+                Ok(tokens) => {
+                    println!("{:?}", tokens);
+                    Ok(())
+                }
+                Err(error) => {
+                    eprintln!("Could not tokenize program! Error: {}", error);
+                    Err(Box::new(error))
+                }
+            }
         }
         Err(error) => {
             eprintln!("Could not read program! Error: {}", error);
