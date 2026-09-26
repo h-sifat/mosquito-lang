@@ -2,24 +2,46 @@ use crate::tokens::{Spanned, TokenType};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LexError {
-    UnterminatedCharLiteral {
+    UnterminatedChar {
         line: usize,
         start_idx: usize,
     },
-    InvalidCharLiteral {
+    InvalidChar {
+        line: usize,
+        start_idx: usize,
+        message: String,
+    },
+    UnterminatedString {
+        line: usize,
+        start_idx: usize,
+    },
+    InvalidString {
         line: usize,
         start_idx: usize,
         message: String,
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum ParseStrLikeResult {
+    Ok(Vec<char>),
+    Unterminated,
+    InvalidEscape(char),
+}
+
 impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LexError::UnterminatedCharLiteral { line, .. } => {
+            LexError::UnterminatedChar { line, .. } => {
                 write!(f, "line {line}: unterminated character literal")
             }
-            LexError::InvalidCharLiteral { line, message, .. } => {
+            LexError::InvalidChar { line, message, .. } => {
+                write!(f, "line {line}: {message}")
+            }
+            LexError::UnterminatedString { line, .. } => {
+                write!(f, "line {line}: unterminated string literal")
+            }
+            LexError::InvalidString { line, message, .. } => {
                 write!(f, "line {line}: {message}")
             }
         }
@@ -107,12 +129,9 @@ impl Lexer {
         }
     }
 
-    /// Before calling this function make sure that the current char is: '
-    fn scan_char_literal(&mut self) -> Result<TokenType, LexError> {
-        let start_idx = self.column_idx;
-
-        if self.advance() != Some('\'') {
-            panic!("Not start of character literal");
+    fn parse_str_like(&mut self, delimiter: char) -> ParseStrLikeResult {
+        if self.advance() != Some(delimiter) {
+            panic!("Not start of string literal");
         }
 
         let mut has_escape = false;
@@ -121,7 +140,7 @@ impl Lexer {
 
         while let Some(c) = self.peek() {
             match c {
-                '\\' | '\'' => {
+                _ if c == '\\' || c == delimiter => {
                     if has_escape {
                         res.push(c);
                         has_escape = false;
@@ -137,22 +156,14 @@ impl Lexer {
                     }
                 }
 
-                '\n' => {
-                    return Err(LexError::UnterminatedCharLiteral {
-                        start_idx,
-                        line: self.line_num,
-                    });
-                }
+                '\n' => return ParseStrLikeResult::Unterminated,
+
                 _ => {
                     if has_escape {
                         if let Some(escaped) = Self::get_escaped_char(c) {
                             res.push(escaped);
                         } else {
-                            return Err(LexError::InvalidCharLiteral {
-                                start_idx,
-                                line: self.line_num,
-                                message: format!("Invalid escape sequence '\\{c}'"),
-                            });
+                            return ParseStrLikeResult::InvalidEscape(c);
                         }
 
                         has_escape = false;
@@ -166,29 +177,61 @@ impl Lexer {
         }
 
         if !has_reached_end {
-            return Err(LexError::UnterminatedCharLiteral {
-                start_idx,
-                line: self.line_num,
-            });
+            return ParseStrLikeResult::Unterminated;
         }
 
-        let error_message: Option<&str> = if res.is_empty() {
-            Some("Empty character literal!")
-        } else if res.len() > 1 {
-            Some("Multiple characters in char literal!")
-        } else {
-            None
-        };
+        ParseStrLikeResult::Ok(res)
+    }
 
-        if let Some(message) = error_message {
-            return Err(LexError::InvalidCharLiteral {
+    /// Before calling this function make sure that the current char is: "
+    fn scan_str_literal(&mut self) -> Result<TokenType, LexError> {
+        let start_idx = self.column_idx;
+
+        match self.parse_str_like('"') {
+            ParseStrLikeResult::Ok(res) => Ok(TokenType::StringVal(String::from_iter(res))),
+            ParseStrLikeResult::Unterminated => Err(LexError::UnterminatedString {
                 start_idx,
                 line: self.line_num,
-                message: message.to_owned(),
-            });
-        }
+            }),
 
-        Ok(TokenType::Char(res[0]))
+            ParseStrLikeResult::InvalidEscape(c) => Err(LexError::InvalidString {
+                start_idx,
+                line: self.line_num,
+                message: format!("Invalid escape sequence '\\{c}'"),
+            }),
+        }
+    }
+
+    /// Before calling this function make sure that the current char is: '
+    fn scan_char_literal(&mut self) -> Result<TokenType, LexError> {
+        let start_idx = self.column_idx;
+
+        match self.parse_str_like('\'') {
+            ParseStrLikeResult::Ok(res) => {
+                if res.len() != 1 {
+                    return Err(LexError::InvalidChar {
+                        start_idx,
+                        line: self.line_num,
+                        message: format!(
+                            "Character literal must contain exactly one character, found {}",
+                            res.len()
+                        ),
+                    });
+                }
+
+                return Ok(TokenType::Char(res[0]));
+            }
+            ParseStrLikeResult::Unterminated => Err(LexError::UnterminatedChar {
+                start_idx,
+                line: self.line_num,
+            }),
+
+            ParseStrLikeResult::InvalidEscape(c) => Err(LexError::InvalidChar {
+                start_idx,
+                line: self.line_num,
+                message: format!("Invalid escape sequence '\\{c}'"),
+            }),
+        }
     }
 
     fn scan_number(&mut self) -> f64 {
@@ -258,6 +301,8 @@ impl Lexer {
                 TokenType::to_keyword_or_bool_data_value(&ident).unwrap_or(TokenType::Ident(ident))
             } else if c == '\'' {
                 self.scan_char_literal()?
+            } else if c == '"' {
+                self.scan_str_literal()?
             } else {
                 println!("Here, c: {c}");
                 todo!()

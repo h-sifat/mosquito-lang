@@ -177,9 +177,7 @@ fn empty_char_literal_is_an_error() {
     // breaks out on the very first peek (the closing quote) without ever
     // needing to advance past anything
     match lex_err("''") {
-        LexError::InvalidCharLiteral { message, .. } => {
-            assert_eq!(message, "Empty character literal!");
-        }
+        LexError::InvalidChar { .. } => {}
         other => panic!("expected InvalidCharLiteral, got {other:?}"),
     }
 }
@@ -199,33 +197,98 @@ fn char_literals() {
     run_cases(cases);
 
     match lex_err("'ab'") {
-        LexError::InvalidCharLiteral { message, .. } => {
-            assert_eq!(message, "Multiple characters in char literal!");
-        }
+        LexError::InvalidChar { .. } => {}
         other => panic!("expected InvalidCharLiteral, got {other:?}"),
     }
 
     match lex_err("'\nx'") {
-        LexError::UnterminatedCharLiteral { .. } => {}
-        other => panic!("expected UnterminatedCharLiteral, got {other:?}"),
+        LexError::UnterminatedChar { .. } => {}
+        other => panic!("expected UnterminatedChar, got {other:?}"),
     }
 
     // running out of input entirely (no closing quote at all) is a second,
     // distinct way to be unterminated - not just hitting a raw '\n' early
     match lex_err("'a") {
-        LexError::UnterminatedCharLiteral { .. } => {}
-        other => panic!("expected UnterminatedCharLiteral, got {other:?}"),
+        LexError::UnterminatedChar { .. } => {}
+        other => panic!("expected UnterminatedChar, got {other:?}"),
     }
 
     match lex_err("'ab") {
-        LexError::UnterminatedCharLiteral { .. } => {}
-        other => panic!("expected UnterminatedCharLiteral, got {other:?}"),
+        LexError::UnterminatedChar { .. } => {}
+        other => panic!("expected UnterminatedChar, got {other:?}"),
     }
 
     match lex_err("'\\q'") {
-        LexError::InvalidCharLiteral { message, .. } => {
+        LexError::InvalidChar { message, .. } => {
             assert_eq!(message, "Invalid escape sequence '\\q'");
         }
         other => panic!("expected InvalidCharLiteral, got {other:?}"),
+    }
+}
+
+#[test]
+fn strings() {
+    use TokenType::*;
+
+    let cases: &[(&str, &[(TokenType, usize)])] = &[
+        ("\"\"", &[(StringVal("".to_string()), 1), (Eof, 1)]),
+        ("\"hi\"", &[(StringVal("hi".to_string()), 1), (Eof, 1)]),
+        (
+            "\"hello world\"",
+            &[(StringVal("hello world".to_string()), 1), (Eof, 1)],
+        ),
+        // escapes get decoded, same set as char literals
+        (
+            "\"line1\\nline2\"",
+            &[(StringVal("line1\nline2".to_string()), 1), (Eof, 1)],
+        ),
+        (
+            "\"tab\\there\"",
+            &[(StringVal("tab\there".to_string()), 1), (Eof, 1)],
+        ),
+        (
+            "\"quote: \\\"\"",
+            &[(StringVal("quote: \"".to_string()), 1), (Eof, 1)],
+        ),
+        (
+            "\"backslash: \\\\\"",
+            &[(StringVal("backslash: \\".to_string()), 1), (Eof, 1)],
+        ),
+        // a single quote inside a double-quoted string needs no escaping
+        (
+            "\"it's fine\"",
+            &[(StringVal("it's fine".to_string()), 1), (Eof, 1)],
+        ),
+        // the string must hand control back cleanly to the next token
+        (
+            "\"hi\";",
+            &[(StringVal("hi".to_string()), 1), (Semicolon, 1), (Eof, 1)],
+        ),
+    ];
+
+    run_cases(cases);
+
+    // unlike char literals, an EMPTY string is perfectly valid - already
+    // covered above by ("\"\"", ...), called out here so it's not missed:
+    // don't reuse char literal's "empty is an error" check for strings.
+
+    match lex_err("\"abc\ndef\"") {
+        LexError::UnterminatedString { .. } => {}
+        other => panic!("expected UnterminatedString, got {other:?}"),
+    }
+
+    // running out of input entirely (no closing quote at all) - the same
+    // distinct failure mode we had to add a `has_reached_end`-style check
+    // for in scan_char_literal
+    match lex_err("\"abc") {
+        LexError::UnterminatedString { .. } => {}
+        other => panic!("expected UnterminatedString, got {other:?}"),
+    }
+
+    match lex_err("\"bad: \\q\"") {
+        LexError::InvalidString { message, .. } => {
+            assert_eq!(message, "Invalid escape sequence '\\q'");
+        }
+        other => panic!("expected InvalidString, got {other:?}"),
     }
 }

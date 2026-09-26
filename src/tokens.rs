@@ -48,6 +48,7 @@ pub enum TokenType {
     Ident(String),
     Bool(bool),
     Char(char),
+    StringVal(String),
 }
 
 impl TokenType {
