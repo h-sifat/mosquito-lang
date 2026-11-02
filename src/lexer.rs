@@ -1,4 +1,5 @@
 use crate::tokens::{Spanned, TokenType};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LexError {
@@ -19,6 +20,11 @@ pub enum LexError {
         line: usize,
         start_idx: usize,
         message: String,
+    },
+    UnknownOperator {
+        line: usize,
+        start_idx: usize,
+        operator: char,
     },
 }
 
@@ -44,6 +50,9 @@ impl std::fmt::Display for LexError {
             LexError::InvalidString { line, message, .. } => {
                 write!(f, "line {line}: {message}")
             }
+            LexError::UnknownOperator { line, operator, .. } => {
+                write!(f, "line {line}: Invalid operator: '{operator}'")
+            }
         }
     }
 }
@@ -56,15 +65,57 @@ pub struct Lexer {
     cursor_idx: usize,
     column_idx: usize,
     pub line_num: usize,
+    max_operator_len: usize,
+    operator_starting_chars: HashSet<char>,
+    operator_map: HashMap<String, TokenType>,
 }
 
 impl Lexer {
     pub fn new(source: &str) -> Lexer {
+        use TokenType::*;
+
+        let entries = vec![
+            ("=", Assignment),
+            ("==", Equality),
+            ("=>", FatArrow),
+            ("!", LogicalNot),
+            ("&&", LogicalAnd),
+            ("||", LogicalOr),
+            ("&&=", LogicalAndEqual),
+            ("||=", LogicalOrEqual),
+            ("!", LogicalNot),
+            ("!=", Inequality),
+            ("+", Plus),
+            ("+=", PlusEqual),
+            ("-", Minus),
+            ("-=", MinusEqual),
+            ("<", LessThan),
+            ("<=", LessThanOrEqual),
+            (">", GreaterThan),
+            (">=", GreaterThanOrEqual),
+            (":", Colon),
+            ("::", DoubleColon),
+            ("*", Multiplication),
+            ("*=", MultiplicationEqual),
+            ("/", Division),
+            ("/=", DivisionEqual),
+        ];
+
+        let operator_starting_chars: HashSet<char> = entries
+            .iter()
+            .map(|(k, _v)| k.chars().next().unwrap())
+            .collect();
+
+        let max_operator_len = entries.iter().map(|(k, _v)| k.len()).max().unwrap();
+
         Lexer {
-            source: source.chars().collect(),
-            cursor_idx: 0,
             line_num: 1,
+            cursor_idx: 0,
             column_idx: 0,
+            max_operator_len,
+            operator_starting_chars,
+            source: source.chars().collect(),
+            operator_map: HashMap::from_iter(entries.into_iter().map(|(k, v)| (k.to_owned(), v))),
         }
     }
 
@@ -276,6 +327,31 @@ impl Lexer {
         ident
     }
 
+    /// @WARN: Before calling this method make sure that the current char belongs
+    /// to the self.operator_starting_chars set
+    fn scan_operators(&mut self) -> Result<TokenType, LexError> {
+        let max_available_len = (self.source.len() - self.cursor_idx).min(self.max_operator_len);
+
+        for i in 0..max_available_len {
+            let end_idx = self.cursor_idx + max_available_len - i - 1;
+
+            let op_str = &self.source[self.cursor_idx..=(end_idx)]
+                .iter()
+                .collect::<String>();
+
+            if let Some(token) = self.operator_map.get(op_str) {
+                self.cursor_idx = end_idx + 1;
+                return Ok(token.clone());
+            }
+        }
+
+        Err(LexError::UnknownOperator {
+            operator: self.peek().unwrap(),
+            line: self.line_num,
+            start_idx: self.cursor_idx,
+        })
+    }
+
     pub fn tokenize(&mut self) -> Result<Vec<Spanned>, LexError> {
         let mut tokens = vec![];
 
@@ -291,22 +367,43 @@ impl Lexer {
                 break;
             };
 
-            let token = if c.is_ascii_digit() {
-                TokenType::Number(self.scan_number())
-            } else if let Some(token) = TokenType::to_punctuation_token(&c) {
-                self.advance();
-                token
-            } else if self.is_start_of_identifier(c) {
-                let ident = self.scan_identifier();
-                TokenType::to_keyword_or_bool_data_value(&ident).unwrap_or(TokenType::Ident(ident))
-            } else if c == '\'' {
-                self.scan_char_literal()?
-            } else if c == '"' {
-                self.scan_str_literal()?
-            } else {
+            let token = (|| {
+                // numbers
+                if c.is_ascii_digit() {
+                    return Ok(TokenType::Number(self.scan_number()));
+                }
+
+                // punctuations
+                if let Some(token) = TokenType::to_punctuation_token(&c) {
+                    self.advance();
+                    return Ok(token);
+                }
+
+                // keywords, booleans or identifiers
+                if self.is_start_of_identifier(c) {
+                    let ident = self.scan_identifier();
+                    return Ok(TokenType::to_keyword_or_bool_data_value(&ident)
+                        .unwrap_or(TokenType::Ident(ident)));
+                }
+
+                // chars
+                if c == '\'' {
+                    return self.scan_char_literal();
+                }
+
+                // strings
+                if c == '"' {
+                    return self.scan_str_literal();
+                }
+
+                // operators
+                if self.operator_starting_chars.contains(&c) {
+                    return self.scan_operators();
+                }
+
                 println!("Here, c: {c}");
                 todo!()
-            };
+            })()?;
 
             tokens.push(Spanned { token, line });
         }

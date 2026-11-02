@@ -292,3 +292,99 @@ fn strings() {
         other => panic!("expected InvalidString, got {other:?}"),
     }
 }
+
+#[test]
+fn operators() {
+    use TokenType::*;
+
+    let cases: &[(&str, &[(TokenType, usize)])] = &[
+        // each two-char operator standalone
+        ("==", &[(Equality, 1), (Eof, 1)]),
+        ("!=", &[(Inequality, 1), (Eof, 1)]),
+        ("<=", &[(LessThanOrEqual, 1), (Eof, 1)]),
+        (">=", &[(GreaterThanOrEqual, 1), (Eof, 1)]),
+        ("+=", &[(PlusEqual, 1), (Eof, 1)]),
+        ("-=", &[(MinusEqual, 1), (Eof, 1)]),
+        ("::", &[(DoubleColon, 1), (Eof, 1)]),
+        ("=>", &[(FatArrow, 1), (Eof, 1)]),
+        // each new single-char operator standalone
+        ("<", &[(LessThan, 1), (Eof, 1)]),
+        (">", &[(GreaterThan, 1), (Eof, 1)]),
+        ("!", &[(LogicalNot, 1), (Eof, 1)]),
+        (":", &[(Colon, 1), (Eof, 1)]),
+        ("?", &[(Question, 1), (Eof, 1)]),
+        // maximal munch: the longer operator wins, and whatever's left over
+        // afterward is tokenized on its own, not swallowed or dropped
+        ("===", &[(Equality, 1), (Assignment, 1), (Eof, 1)]),
+        ("<==", &[(LessThanOrEqual, 1), (Assignment, 1), (Eof, 1)]),
+        (">==", &[(GreaterThanOrEqual, 1), (Assignment, 1), (Eof, 1)]),
+        ("!==", &[(Inequality, 1), (Assignment, 1), (Eof, 1)]),
+        ("+==", &[(PlusEqual, 1), (Assignment, 1), (Eof, 1)]),
+        ("-==", &[(MinusEqual, 1), (Assignment, 1), (Eof, 1)]),
+        (":::", &[(DoubleColon, 1), (Colon, 1), (Eof, 1)]),
+        // `++`/`--` are NOT operators in mosquito - just two separate tokens
+        ("++", &[(Plus, 1), (Plus, 1), (Eof, 1)]),
+        ("--", &[(Minus, 1), (Minus, 1), (Eof, 1)]),
+        // a space between two `=` must NOT be merged into `==`
+        ("= =", &[(Assignment, 1), (Assignment, 1), (Eof, 1)]),
+        // realistic usage, adjacent to identifiers/numbers with no space
+        (
+            "i += 1;",
+            &[
+                (Ident("i".to_string()), 1),
+                (PlusEqual, 1),
+                (Number(1.0), 1),
+                (Semicolon, 1),
+                (Eof, 1),
+            ],
+        ),
+        (
+            "!x",
+            &[(LogicalNot, 1), (Ident("x".to_string()), 1), (Eof, 1)],
+        ),
+        (
+            "a::b",
+            &[
+                (Ident("a".to_string()), 1),
+                (DoubleColon, 1),
+                (Ident("b".to_string()), 1),
+                (Eof, 1),
+            ],
+        ),
+        (
+            "a=>b",
+            &[
+                (Ident("a".to_string()), 1),
+                (FatArrow, 1),
+                (Ident("b".to_string()), 1),
+                (Eof, 1),
+            ],
+        ),
+        // straight from the spec: `age < 18 ? "minor" : "adult"`
+        (
+            "age < 18 ? \"minor\" : \"adult\"",
+            &[
+                (Ident("age".to_string()), 1),
+                (LessThan, 1),
+                (Number(18.0), 1),
+                (Question, 1),
+                (StringVal("minor".to_string()), 1),
+                (Colon, 1),
+                (StringVal("adult".to_string()), 1),
+                (Eof, 1),
+            ],
+        ),
+    ];
+
+    run_cases(cases);
+}
+
+#[test]
+fn error_on_unknown_operators() {
+    // We don't support the bitwise OR (|) operator yet however we do support logical OR (||)
+    // So a single | should be an error
+    match lex_err("|") {
+        LexError::UnknownOperator { .. } => {}
+        other => panic!("expected UnknownOperator, got {other:?}"),
+    }
+}

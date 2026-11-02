@@ -103,7 +103,7 @@ const mut person = new Person("Alex", 21);
 person.introduce();
 person.email; // "Alex@org.com"
 
-person.age++;
+person.age += 1;
 
 Person::test();
 ```
@@ -127,7 +127,7 @@ if(let name = getName(); name.length < 3) {
 
 let value = age < 18 ? "minor" : "adult"; // typeof(value) == "str"
 
-for(let i = 1, j = 10; i < j; i++, j--) {
+for(let i = 1, j = 10; i < j; i += 1, j -= 1) {
 
 }
 

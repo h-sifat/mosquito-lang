@@ -42,6 +42,25 @@ pub enum TokenType {
     Minus,
     Multiplication,
     Division,
+    MultiplicationEqual,
+    DivisionEqual,
+    Equality,
+    Inequality,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
+    FatArrow,
+    LessThan,
+    GreaterThan,
+    Colon,
+    Question,
+    PlusEqual,
+    MinusEqual,
+    DoubleColon,
+    LogicalNot,
+    LogicalOr,
+    LogicalAnd,
+    LogicalOrEqual,
+    LogicalAndEqual,
 
     // Data Values
     Number(f64),
@@ -53,21 +72,19 @@ pub enum TokenType {
 
 impl TokenType {
     pub fn to_punctuation_token(c: &char) -> Option<TokenType> {
+        use TokenType::*;
+
         match c {
-            '(' => Some(TokenType::LParen),
-            ')' => Some(TokenType::RParen),
-            '{' => Some(TokenType::LBrace),
-            '}' => Some(TokenType::RBrace),
-            '[' => Some(TokenType::LBracket),
-            ']' => Some(TokenType::RBracket),
-            ',' => Some(TokenType::Comma),
-            ';' => Some(TokenType::Semicolon),
-            '.' => Some(TokenType::Dot),
-            '=' => Some(TokenType::Assignment),
-            '+' => Some(TokenType::Plus),
-            '-' => Some(TokenType::Minus),
-            '*' => Some(TokenType::Multiplication),
-            '/' => Some(TokenType::Division),
+            '(' => Some(LParen),
+            ')' => Some(RParen),
+            '{' => Some(LBrace),
+            '}' => Some(RBrace),
+            '[' => Some(LBracket),
+            ']' => Some(RBracket),
+            ',' => Some(Comma),
+            ';' => Some(Semicolon),
+            '.' => Some(Dot),
+            '?' => Some(Question),
             _ => None,
         }
     }
